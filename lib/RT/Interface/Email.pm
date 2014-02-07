@@ -59,6 +59,7 @@ use UNIVERSAL::require;
 use Mail::Mailer ();
 use Text::ParseWords qw/shellwords/;
 use MIME::Words ();
+use Scope::Upper qw/unwind HERE/;
 
 =head1 NAME
 
@@ -99,9 +100,13 @@ Returns:
 
       for succces, the status code should be 1
 
-
-
 =cut
+
+my $SCOPE;
+sub TMPFAIL { unwind (-75,     $_[0], undef, => $SCOPE) }
+sub FAILURE { unwind (  0,     $_[0], $_[1], => $SCOPE) }
+sub SUCCESS { unwind (  1, "Success", $_[0], => $SCOPE) }
+
 
 sub Gateway {
     my $argsref = shift;
@@ -113,21 +118,20 @@ sub Gateway {
         %$argsref
     );
 
+    # Set the scope to return from with TMPFAIL/FAILURE/SUCCESS
+    $SCOPE = HERE;
+
     my $SystemTicket;
     my $Right;
 
     # Validate the action
     my ( $status, @actions ) = IsCorrectAction( $args{'action'} );
-    unless ($status) {
-        return (
-            -75,
-            "Invalid 'action' parameter "
-                . $actions[0]
-                . " for queue "
-                . $args{'queue'},
-            undef
-        );
-    }
+    TMPFAIL(
+        "Invalid 'action' parameter "
+            . $actions[0]
+            . " for queue "
+            . $args{'queue'},
+    ) unless $status;
 
     my $parser = RT::EmailParser->new();
     $parser->SmartParseMIMEEntityFromScalar(
@@ -144,7 +148,7 @@ sub Gateway {
             Attach      => $args{'message'}
         );
 
-        return ( 0,
+        FAILURE(
             "Failed to parse this message. Something is likely badly wrong with the message"
         );
     }
@@ -186,11 +190,8 @@ sub Gateway {
         );
         next if $status > 0;
 
-        if ( $status == -2 ) {
-            return (1, $msg, undef);
-        } elsif ( $status == -1 ) {
-            return (0, $msg, undef);
-        }
+        SUCCESS($msg) if $status == -2;
+        FAILURE($msg) if $status == -1;
     }
     @mail_plugins = grep !$skip_plugin{"$_"}, @mail_plugins;
     $parser->_DecodeBodies;
@@ -222,9 +223,8 @@ sub Gateway {
 
     # Do not pass loop messages to MailPlugins, to make sure the loop
     # is broken, unless $RT::StoreLoops is set.
-    if ($IsALoop && !$should_store_machine_generated_message) {
-        return ( 0, $result, undef );
-    }
+    FAILURE($result)
+        if $IsALoop && !$should_store_machine_generated_message;
     # }}}
 
     $args{'ticket'} ||= ExtractTicketId( $Message );
@@ -242,9 +242,8 @@ sub Gateway {
     }
 
     # We can safely have no queue of we have a known-good ticket
-    unless ( $SystemTicket->id || $SystemQueueObj->id ) {
-        return ( -75, "RT couldn't find the queue: " . $args{'queue'}, undef );
-    }
+    TMPFAIL("RT couldn't find the queue: " . $args{'queue'})
+        unless $SystemTicket->id || $SystemQueueObj->id;
 
     my ($AuthStat, $CurrentUser, $error) = GetAuthenticationLevel(
         MailPlugins   => \@mail_plugins,
@@ -266,9 +265,8 @@ sub Gateway {
                 Requestor => $ErrorsTo,
                 Queue     => $args{'queue'}
             );
-
         }
-        return ( 0, "Could not load a valid user", undef );
+        FAILURE("Could not load a valid user");
     }
 
     # If we got a user, but they don't have the right to say things
@@ -280,20 +278,16 @@ sub Gateway {
                 "You do not have permission to communicate with RT",
             MIMEObj => $Message
         );
-        return (
-            0,
+        FAILURE(
             ($CurrentUser->EmailAddress || $CurrentUser->Name)
             . " ($Sender) tried to submit a message to "
                 . $args{'Queue'}
                 . " without permission.",
-            undef
         );
     }
 
-
-    unless ($should_store_machine_generated_message) {
-        return ( 0, $result, undef );
-    }
+    FAILURE( $result )
+        unless $should_store_machine_generated_message;
 
     # if plugin's updated SystemTicket then update arguments
     $args{'ticket'} = $SystemTicket->Id if $SystemTicket && $SystemTicket->Id;
@@ -330,7 +324,7 @@ sub Gateway {
                 Explanation => $ErrStr,
                 MIMEObj     => $Message
             );
-            return ( 0, "Ticket creation From: $From failed: $ErrStr", $Ticket );
+            FAILURE("Ticket creation From: $From failed: $ErrStr", $Ticket );
         }
 
         # strip comments&corresponds from the actions we don't need
@@ -350,11 +344,11 @@ sub Gateway {
                 MIMEObj     => $Message
             );
 
-            return ( 0, $error );
+            FAILURE( $error );
         }
         $args{'ticket'} = $Ticket->id;
     } else {
-        return ( 1, "Success", $Ticket );
+        SUCCESS( $Ticket );
     }
 
     # }}}
@@ -375,20 +369,19 @@ sub Gateway {
                     Explanation => $msg,
                     MIMEObj     => $Message
                 );
-                return ( 0, "Message From: $From not recorded: $msg", $Ticket );
+                FAILURE( "Message From: $From not recorded: $msg", $Ticket );
             }
         } elsif ($unsafe_actions) {
-            my ( $status, $msg ) = _RunUnsafeAction(
+            _RunUnsafeAction(
                 Action      => $action,
                 ErrorsTo    => $ErrorsTo,
                 Message     => $Message,
                 Ticket      => $Ticket,
                 CurrentUser => $CurrentUser,
             );
-            return ($status, $msg, $Ticket) unless $status == 1;
         }
     }
-    return ( 1, "Success", $Ticket );
+    SUCCESS( $Ticket );
 }
 
 =head3 IsCorrectAction
@@ -976,7 +969,7 @@ sub _RunUnsafeAction {
                 Explanation => $msg,
                 MIMEObj     => $args{'Message'}
             );
-            return ( 0, "Ticket not taken, by email From: $From" );
+            FAILURE( "Ticket not taken, by email From: $From" );
         }
     } elsif ( $args{'Action'} =~ /^resolve$/i ) {
         my $new_status = $args{'Ticket'}->FirstInactiveStatus;
@@ -991,13 +984,12 @@ sub _RunUnsafeAction {
                     Explanation => $msg,
                     MIMEObj     => $args{'Message'}
                 );
-                return ( 0, "Ticket not resolved, by email From: $From" );
+                FAILURE( "Ticket not resolved, by email From: $From" );
             }
         }
     } else {
-        return ( 0, "Not supported unsafe action $args{'Action'}, by email From: $From", $args{'Ticket'} );
+        FAILURE( "Not supported unsafe action $args{'Action'}, by email From: $From", $args{'Ticket'} );
     }
-    return ( 1, "Success" );
 }
 
 =head3 MailError PARAM HASH

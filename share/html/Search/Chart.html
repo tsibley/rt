@@ -102,6 +102,14 @@ my %query;
 }
 
 $m->callback( ARGSRef => \%ARGS, QueryArgsRef => \%query );
+
+@GroupBy = ref $ARGS{'GroupBy'} ?
+    @{ $ARGS{'GroupBy'} }
+    : $ARGS{'GroupBy'};
+
+@ChartFunction = ref $ARGS{'ChartFunction'} ?
+    @{ $ARGS{'ChartFunction'} }
+    : $ARGS{'ChartFunction'};
 </%init>
 <& /Elements/Header, Title => $title &>
 <& /Elements/Tabs, QueryArgs => \%query &>
@@ -161,11 +169,11 @@ $m->callback( ARGSRef => \%ARGS, QueryArgsRef => \%query );
 </&>
 
 <&| /Widgets/TitleBox, title => loc('Picture'), class => "chart-picture" &>
-<label><% loc('Style') %>: <& Elements/SelectChartType, Default => $ChartStyle, Name => 'ChartStyle' &></label>
-<label><% loc("Width") %>: <input type="text" name="Width" value="<% $Width || "" %>"> <% loc("px") %></label>
+<label><% loc('Style') %>: <& Elements/SelectChartType, Default => $ARGS{ChartStyle} || $ChartStyle, Name => 'ChartStyle' &></label>
+<label><% loc("Width") %>: <input type="text" name="Width" value="<% $ARGS{Width} || "" %>"> <% loc("px") %></label>
 <span class="height">
   &#x00d7;
-  <label><% loc("Height") %>: <input type="text" name="Height" value="<% $Height || "" %>"> <% loc("px") %></label>
+  <label><% loc("Height") %>: <input type="text" name="Height" value="<% $ARGS{Height} || "" %>"> <% loc("px") %></label>
 </span>
 </&>
 <script type="text/javascript">

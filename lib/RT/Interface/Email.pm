@@ -108,7 +108,6 @@ sub TMPFAIL { unwind (-75,     $_[0], undef, => $SCOPE) }
 sub FAILURE { unwind (  0,     $_[0], $_[1], => $SCOPE) }
 sub SUCCESS { unwind (  1, "Success", $_[0], => $SCOPE) }
 
-
 sub Gateway {
     my $argsref = shift;
     my %args    = (
@@ -182,10 +181,16 @@ sub Gateway {
     $ErrorsTo = RT->Config->Get('OwnerEmail')
         if IsMachineGeneratedMail(
             Message   => $Message,
-            ErrorsTo  => $ErrorsTo,
             Subject   => $Subject,
             MessageId => $MessageId,
         );
+
+    # Make all errors from here on out bounce back to $ErrorsTo
+    my $bare_MailError = \&MailError;
+    no warnings 'redefine';
+    local *MailError = sub {
+        $bare_MailError->(To => $ErrorsTo, MIMEObj => $Message, @_)
+    };
 
     $args{'ticket'} ||= ExtractTicketId( $Message );
 
@@ -197,7 +202,6 @@ sub Gateway {
         unless $SystemTicket->id || $SystemQueueObj->id;
 
     my $CurrentUser = GetCurrentUser(
-        ErrorsTo      => $ErrorsTo,
         Message       => $Message,
         RawMessageRef => \$args{message},
         Ticket        => $SystemTicket,
@@ -208,7 +212,6 @@ sub Gateway {
     # may have gotten rights by the time they happen.
     CheckACL(
         Action        => $actions[0],
-        ErrorsTo      => $ErrorsTo,
         Message       => $Message,
         CurrentUser   => $CurrentUser,
         Ticket        => $SystemTicket,
@@ -221,7 +224,6 @@ sub Gateway {
     for my $action (@actions) {
         HandleAction(
             Action      => $action,
-            ErrorsTo    => $ErrorsTo,
             Subject     => $Subject,
             Message     => $Message,
             Ticket      => $Ticket,
@@ -279,7 +281,6 @@ sub Plugins {
 
 sub GetCurrentUser {
     my %args = (
-        ErrorsTo      => undef,
         Message       => undef,
         RawMessageRef => undef,
         Ticket        => undef,
@@ -302,10 +303,8 @@ sub GetCurrentUser {
     # rare; some non-Auth::MailFrom authentication plugin which
     # doesn't always return a current user?
     MailError(
-        To          => $args{ErrorsTo},
         Subject     => "Permission Denied",
         Explanation => "You do not have permission to communicate with RT",
-        MIMEObj     => $args{Message},
     );
     FAILURE("Could not load a valid user");
 }
@@ -323,7 +322,6 @@ sub GetCurrentUser {
 sub CheckACL {
     my %args = (
         Action        => undef,
-        ErrorsTo      => undef,
         Message       => undef,
         CurrentUser   => undef,
         Ticket        => undef,
@@ -333,7 +331,6 @@ sub CheckACL {
 
     for my $Code ( Plugins( Method => "CheckACL" ) ) {
         return if $Code->(
-            ErrorsTo      => $args{ErrorsTo},
             Message       => $args{Message},
             CurrentUser   => $args{CurrentUser},
             Action        => $args{Action},
@@ -344,10 +341,8 @@ sub CheckACL {
 
     # Nobody said yes, and nobody said FAILURE; fail closed
     MailError(
-        To          => $args{ErrorsTo},
         Subject     => "Permission Denied",
         Explanation => "You have no permission to $args{Action}",
-        MIMEObj     => $args{Message},
     );
     FAILURE( "You have no permission to $args{Action}" );
 }
@@ -355,7 +350,6 @@ sub CheckACL {
 sub HandleAction {
     my %args = (
         Action   => undef,
-        ErrorsTo => undef,
         Subject  => undef,
         Message  => undef,
         Ticket   => undef,
@@ -500,7 +494,6 @@ sub IsMachineGeneratedMail {
                 To          => $owner_mail,
                 Subject     => "RT Bounce: ".$args{'Subject'},
                 Explanation => "RT thinks this message may be a bounce",
-                MIMEObj     => $args{Message}
             );
         }
 
@@ -683,8 +676,6 @@ Sends an error message. Takes a param hash:
 
 =item To - recipient, by default is 'OwnerEmail';
 
-=item Bcc - optional Bcc recipients;
-
 =item Subject - subject of the message, default is 'There has been an error';
 
 =item Explanation - main content of the error, default value is 'Unexplained error';
@@ -704,7 +695,6 @@ explanation message into the log, by default we log it as critical.
 sub MailError {
     my %args = (
         To          => RT->Config->Get('OwnerEmail'),
-        Bcc         => undef,
         From        => RT->Config->Get('CorrespondAddress'),
         Subject     => 'There has been an error',
         Explanation => 'Unexplained error',
@@ -723,7 +713,6 @@ sub MailError {
     my %entity_args = (
         Type                    => "multipart/mixed",
         From                    => $args{'From'},
-        Bcc                     => $args{'Bcc'},
         To                      => $args{'To'},
         Subject                 => $args{'Subject'},
         'X-RT-Loop-Prevention:' => RT->Config->Get('rtname'),

@@ -58,7 +58,6 @@ use RT::Interface::Email;
 
 sub _HandleCreate {
     my %args = (
-        ErrorsTo    => undef,
         Subject     => undef,
         Message     => undef,
         Ticket      => undef,
@@ -97,10 +96,8 @@ sub _HandleCreate {
     return if $id;
 
     MailError(
-        To          => $args{ErrorsTo},
         Subject     => "Ticket creation failed: $args{Subject}",
         Explanation => $ErrStr,
-        MIMEObj     => $args{Message},
     );
     FAILURE("Ticket creation failed: $ErrStr", $args{Ticket} );
 }
@@ -116,7 +113,6 @@ sub HandleCorrespond {
 sub _HandleEither {
     my %args = (
         Action      => undef,
-        ErrorsTo    => undef,
         Message     => undef,
         Subject     => undef,
         Ticket      => undef,
@@ -130,10 +126,8 @@ sub _HandleEither {
     unless ( $args{Ticket}->Id ) {
         my $error = "Could not find a ticket with id " . $args{TicketId};
         MailError(
-            To          => $args{ErrorsTo},
             Subject     => "Message not recorded: $args{Subject}",
             Explanation => $error,
-            MIMEObj     => $args{Message}
         );
         FAILURE( $error );
     }

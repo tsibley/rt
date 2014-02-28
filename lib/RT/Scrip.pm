@@ -458,6 +458,26 @@ sub Stage {
     return undef;
 }
 
+=head2 FriendlyStage($Stage)
+
+Helper function that returns a localized human-readable version of the
+C<$Stage> argument.
+
+=cut
+
+sub FriendlyStage {
+    my ( $class, $stage ) = @_;
+    my $stage_i18n_lookup = {
+        TransactionCreate => 'Normal',
+        UseTransactionBatch => 'Batch',
+        TransactionBatch => 'Batch (disabled by config)',
+    };
+    my $stage_prefix = RT->Config->Get('UseTransactionBatch')
+        ? 'Use'
+        : q{};
+    return $stage_i18n_lookup->{ $stage_prefix . $stage }
+        || $stage_i18n_lookup->{ $stage };
+}
 
 =head2 Apply { TicketObj => undef, TransactionObj => undef}
 

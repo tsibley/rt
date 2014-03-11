@@ -141,11 +141,8 @@ sub Gateway {
         MailError(
             Subject     => "RT Bounce: Unparseable message",
             Explanation => "RT couldn't process the message below",
-            Attach      => $args{'message'}
-        );
-
-        FAILURE(
-            "Failed to parse this message. Something is likely badly wrong with the message"
+            Attach      => $args{'message'},
+            FAILURE     => 1,
         );
     }
 
@@ -318,8 +315,8 @@ sub GetCurrentUser {
     MailError(
         Subject     => "Permission Denied",
         Explanation => "You do not have permission to communicate with RT",
+        FAILURE     => 1,
     );
-    FAILURE("Could not load a valid user");
 }
 
 =head2 CheckACL
@@ -356,8 +353,8 @@ sub CheckACL {
     MailError(
         Subject     => "Permission Denied",
         Explanation => "You have no permission to $args{Action}",
+        FAILURE     => 1,
     );
-    FAILURE( "You have no permission to $args{Action}" );
 }
 
 sub HandleAction {
@@ -641,6 +638,7 @@ sub MailError {
         MIMEObj     => undef,
         Attach      => undef,
         LogLevel    => 'crit',
+        FAILURE     => 0,
         @_
     );
 
@@ -679,6 +677,8 @@ sub MailError {
     }
 
     SendEmail( Entity => $entity, Bounce => 1 );
+
+    FAILURE( "$args{Subject}: $args{Explanation}" ) if $args{FAILURE};
 }
 
 =head2 SENDING EMAIL

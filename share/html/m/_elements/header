@@ -55,7 +55,6 @@ $r->headers_out->{'Cache-control'} = 'no-cache';
 </%init>
 <html>
 <head>
-<& /Elements/Framekiller &>
 <link rel="stylesheet" type="text/css" href="<%RT->Config->Get('WebPath')%>/static/css/mobile.css"/>
 <title><%$title%></title>
 % my ($jquery) = grep { /^jquery-\d+\./ } RT::Interface::Web->JSFiles;

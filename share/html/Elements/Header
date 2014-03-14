@@ -56,8 +56,6 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <!-- The X-UA-Compatible <meta> tag above must be very early in <head> -->
 
-    <& /Elements/Framekiller &>
-
 % if ($Refresh && $Refresh =~ /^(\d+)/ && $1 > 0) {
 %   my $URL = $m->notes->{RefreshURL}; $URL = $URL ? ";URL=$URL" : "";
     <meta http-equiv="refresh" content="<% "$1$URL" %>" />

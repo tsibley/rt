@@ -51,5 +51,6 @@
 <&|/l_unsafe,     '', '', '2014', '<a href="http://www.bestpractical.com?rt='.$RT::VERSION.'">Best Practical Solutions, LLC</a>', &>[_1] RT [_2] Copyright 1996-[_3] [_4].</&>
 </div>
 </div>
+<& /Elements/Framekiller &>
 </body>
 </html>
